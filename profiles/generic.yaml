@@ -1,0 +1,7 @@
+name: generic
+description: Default template for new sites. Agent will auto-populate fingerprints here.
+entry_url: ""
+selectors: {}
+fingerprints: {}
+network:
+  stream_url_keyword: ""

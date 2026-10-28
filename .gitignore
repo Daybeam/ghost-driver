@@ -1,0 +1,64 @@
+# Compiled binaries
+*.exe
+*.exe~
+*.exe.old
+/ghost-driver
+/ghost-driver-*
+
+# Debug logs
+*.log
+debug_*.log
+
+# Test images / screenshots
+google_account.png
+test.png
+test_cli.png
+
+# OS artifacts
+nul
+Thumbs.db
+.DS_Store
+
+# IDE configuration
+.idea/
+
+# Python temporary scripts
+fetch_article.py
+
+# Backup files
+*.bak
+*.old
+*~
+
+# Build output
+dist/
+
+# Runtime data & memory databases
+memory/
+internal/mcp/memory/
+profiles/*.db
+profiles/*.db-journal
+*.db
+*.jsonl
+
+# Environment
+.env
+
+# Private / Internal workspace directory
+.private/
+private/
+
+# Internal artifacts
+*.artifact.md
+project_requirement
+project_requirement.md
+
+# Packages (release zips)
+packages/
+
+# Trash
+trash/
+
+# Dev tooling workspaces (must never be committed)
+.codeartsdoer/
+.codegraph/

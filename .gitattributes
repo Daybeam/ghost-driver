@@ -1,0 +1,20 @@
+# Normalize line endings: always store LF in the repository.
+# Prevents Windows contributors (core.autocrlf=true) from committing CRLF
+# and producing whole-file diffs in a cross-platform open-source project.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF to run correctly.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files — never apply line-ending conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.db binary
+*.exe binary
+*.zip binary
+*.gz binary
