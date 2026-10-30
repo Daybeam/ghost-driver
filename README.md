@@ -78,6 +78,16 @@ LLM / Claude
         │     └── selector.go    自愈选择器（3层降级）
         ├── internal/vision/
         │     └── vlm.go         VLM (Gemini/OpenAI/Claude) → 像素坐标
+        ├── internal/predict/
+        │     └── predictor.go   链接预取 / 元素预测
+        ├── internal/profile/
+        │     └── profile.go     站点配置文件加载与热更新
+        ├── internal/audit/
+        │     └── audit.go       工具调用审计日志 (JSONL)
+        ├── internal/config/
+        │     └── config.go      环境变量与构建配置
+        ├── internal/resources/
+        │     └── resources.go   内嵌 JS 资源 (stealth, extraction, recorder)
         ├── internal/mcp/
         │     └── server.go      MCP tool 定义与分发
         └── cmd/ghost-driver/
@@ -284,6 +294,20 @@ connect_browser { "devtools_http": "http://host.docker.internal:9222" }
 | `screenshot` | — | 截取当前视口，返回 base64 PNG |
 | `start_recording` | `fps` | 开始录屏（默认 8fps） |
 | `stop_recording` | `out_path`* | 停止并通过 FFmpeg 渲染为 `.gif` 或 `.mp4` |
+
+### 视觉
+
+| 工具 | 参数 | 说明 |
+|---|---|---|
+| `vision_analyze` | `prompt`*, `image` | VLM 视觉分析，返回元素坐标 |
+| `pixel_click` | `x`*, `y`* | 直接点击像素坐标（视觉降级方案） |
+
+### 站点配置
+
+| 工具 | 参数 | 说明 |
+|---|---|---|
+| `discover_site_selectors` | — | 自动发现页面的输入框和按钮选择器 |
+| `save_site_profile` | `name`*, `yaml_content`* | 保存站点配置到 `./profiles/*.yaml` |
 
 ### 工具合并 (`GHOST_LEGACY_TOOLS`)
 

@@ -74,7 +74,17 @@ LLM / Claude
         │     ├── virtual_list.go Virtual list scroll extraction
         │     └── selector.go    Self-healing selector (3-tier fallback)
         ├── internal/vision/
-        │     └── vlm.go         Claude Vision → Pixel coordinates
+        │     └── vlm.go         VLM (Gemini/OpenAI/Claude) → Pixel coordinates
+        ├── internal/predict/
+        │     └── predictor.go   Link prefetch / element prediction
+        ├── internal/profile/
+        │     └── profile.go     Site profile loading and hot-reload
+        ├── internal/audit/
+        │     └── audit.go       Tool call audit log (JSONL)
+        ├── internal/config/
+        │     └── config.go      Environment variables and build config
+        ├── internal/resources/
+        │     └── resources.go   Embedded JS resources (stealth, extraction, recorder)
         ├── internal/mcp/
         │     └── server.go      MCP tool definitions and dispatching
         └── cmd/ghost-driver/
@@ -274,6 +284,20 @@ connect_browser { "devtools_http": "http://host.docker.internal:9222" }
 | `screenshot` | — | Capture viewport as base64 PNG |
 | `start_recording` | `fps` | Start screen recording (default 8fps) |
 | `stop_recording` | `out_path`* | Stop and render GIF / MP4 via FFmpeg |
+
+### Vision
+
+| Tool | Parameters | Description |
+|---|---|---|
+| `vision_analyze` | `prompt`*, `image` | VLM visual analysis, returns element coordinates |
+| `pixel_click` | `x`*, `y`* | Click pixel coordinates directly (visual fallback) |
+
+### Site Profiles
+
+| Tool | Parameters | Description |
+|---|---|---|
+| `discover_site_selectors` | — | Auto-discover input and button selectors on the page |
+| `save_site_profile` | `name`*, `yaml_content`* | Save site profile to `./profiles/*.yaml` |
 
 ### Tool Merge (`GHOST_LEGACY_TOOLS`)
 
