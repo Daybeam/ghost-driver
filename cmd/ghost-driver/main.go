@@ -27,6 +27,7 @@ func main() {
 	jsFlag := flag.String("js", "", "JS expression for eval")
 	outFlag := flag.String("out", "", "Output path for screenshot")
 	selectorFlag := flag.String("selector", "", "CSS selector for get_markdown/get_html")
+	filesFlag := flag.String("files", "", "Semicolon-separated local file paths for upload_files")
 	descFlag := flag.String("description", "", "Element description for smart_click")
 	selRawFlag := flag.String("selectors", "", "Comma-separated CSS selectors for smart_click")
 	dxFlag := flag.Float64("dx", 0, "Scroll delta X")
@@ -67,6 +68,7 @@ func main() {
 			"out":          *outFlag,
 			"headless":     *headlessFlag,
 			"selector":     *selectorFlag,
+			"files":        *filesFlag,
 			"description":  *descFlag,
 			"selectors":    *selRawFlag,
 			"dx":           *dxFlag,

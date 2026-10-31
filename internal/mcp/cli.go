@@ -207,6 +207,20 @@ func (s *State) InvokeCLI(ctx context.Context, action string, args map[string]an
 			return "", err
 		}
 		return "page settled", nil
+	case "upload_files":
+		filesRaw, _ := args["files"].(string)
+		if filesRaw == "" {
+			return "", fmt.Errorf("missing files")
+		}
+		selector, _ := args["selector"].(string)
+		if b == nil {
+			return "", fmt.Errorf("no browser connected")
+		}
+		files := splitSemicolon(filesRaw)
+		if err := b.UploadFiles(ctx, files, selector); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Provided %d file(s) to the file chooser.", len(files)), nil
 	default:
 		return "", fmt.Errorf("unknown action: %s", action)
 	}
