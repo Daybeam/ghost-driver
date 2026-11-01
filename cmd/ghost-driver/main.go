@@ -34,6 +34,8 @@ func main() {
 	dyFlag := flag.Float64("dy", 0, "Scroll delta Y")
 	browserPathFlag := flag.String("browser-path", "", "Path to browser binary (chrome/firefox/electron)")
 	devPortFlag := flag.Int("dev-port", 9222, "DevTools debugging port")
+	newTabFlag := flag.Bool("new-tab", false, "Open a new tab instead of attaching to the first existing one")
+	tabURLFlag := flag.String("tab-url", "", "Attach to the tab whose URL contains this substring")
 	versionFlag := flag.Bool("version", false, "Print version and exit")
 
 	flag.Usage = func() {
@@ -75,6 +77,8 @@ func main() {
 			"dy":           *dyFlag,
 			"browser_path": *browserPathFlag,
 			"dev_port":     *devPortFlag,
+			"new_tab":      *newTabFlag,
+			"tab_url":      *tabURLFlag,
 		}
 		res, err := s.InvokeCLI(context.Background(), *action, args)
 		if err != nil {

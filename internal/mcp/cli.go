@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/Daybeam/ghost-driver/internal/browser"
 	"github.com/Daybeam/ghost-driver/internal/cdp"
@@ -25,39 +26,68 @@ func (s *State) InvokeCLI(ctx context.Context, action string, args map[string]an
 				devPort = 9222
 			}
 			devToolsHTTP := fmt.Sprintf("http://127.0.0.1:%d", devPort)
-			// Try to connect to existing browser on the port
 			cfg := browser.Config{
 				Mode:         browser.ModeAttached,
 				DevToolsHTTP: devToolsHTTP,
 				Headless:     headless,
 			}
-			// If port is closed, fallback to Managed mode
-			if !browser.CheckPortOpen(cfg.DevToolsHTTP) {
-				cfg.Mode = browser.ModeManaged
-				if browserPath != "" {
-					cfg.BrowserPath = browserPath
-				} else {
-					cfg.BrowserPath = browser.DefaultBrowserPath()
+			// Optionally open a new tab instead of grabbing the first existing one
+			if nt, ok := args["new_tab"].(bool); ok && nt {
+				cfg.NewTab = true
+			}
+
+			// Optionally attach to a specific existing tab by URL substring.
+			// Each stateless CLI call re-resolves the match independently, so
+			// repeated calls keep targeting the same tab without state.
+			if tu, ok := args["tab_url"].(string); ok && tu != "" {
+				if targets, terr := cdp.ListTargets(devToolsHTTP); terr == nil {
+					for _, t := range targets {
+						if t.Type == "page" && t.WebSocketDebuggerURL != "" && strings.Contains(t.URL, tu) {
+							if nb, nerr := browser.New(ctx, devToolsHTTP, t.WebSocketDebuggerURL, t.ID, cfg.StealthEnabled, s.registry, false); nerr == nil {
+								s.mu.Lock()
+								s.mgr = browser.NewManager(cfg, s.registry)
+								s.browsers[t.ID] = nb
+								s.inputs[t.ID] = browser.NewInput(nb, browser.InputModeL2)
+								s.activeID = t.ID
+								s.lastCfg = &cfg
+								s.mu.Unlock()
+								break
+							}
+						}
+					}
 				}
 			}
 
-			s.mu.Lock()
-			s.mgr = browser.NewManager(cfg, s.registry)
-			s.lastCfg = &cfg
-			s.mu.Unlock()
-			b, err := s.mgr.Start(ctx)
-			if err != nil {
-				return "", fmt.Errorf("failed to auto-connect to browser: %w", err)
+			// Fallback: connect via the manager (grab first tab, or open a new one).
+			if s.activeID == "" {
+				// If port is closed, fallback to Managed mode
+				if !browser.CheckPortOpen(cfg.DevToolsHTTP) {
+					cfg.Mode = browser.ModeManaged
+					if browserPath != "" {
+						cfg.BrowserPath = browserPath
+					} else {
+						cfg.BrowserPath = browser.DefaultBrowserPath()
+					}
+				}
+
+				s.mu.Lock()
+				s.mgr = browser.NewManager(cfg, s.registry)
+				s.lastCfg = &cfg
+				s.mu.Unlock()
+				b, err := s.mgr.Start(ctx)
+				if err != nil {
+					return "", fmt.Errorf("failed to auto-connect to browser: %w", err)
+				}
+				targetID := b.TargetID()
+				if targetID == "" {
+					targetID = "default"
+				}
+				s.mu.Lock()
+				s.browsers[targetID] = b
+				s.inputs[targetID] = browser.NewInput(b, browser.InputModeL2)
+				s.activeID = targetID
+				s.mu.Unlock()
 			}
-			targetID := b.TargetID()
-			if targetID == "" {
-				targetID = "default"
-			}
-			s.mu.Lock()
-			s.browsers[targetID] = b
-			s.inputs[targetID] = browser.NewInput(b, browser.InputModeL2)
-			s.activeID = targetID
-			s.mu.Unlock()
 		}
 	} else if action != "connect_browser" {
 		// Even if connected, ensure it's healthy
