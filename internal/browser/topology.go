@@ -308,10 +308,16 @@ func (t *Topology) RecordTransition(fromURL, fromTitle, toURL, toTitle, action s
 	}
 
 	// Insert Edge with session_id
-	argsJSON, _ := json.Marshal(args)
-	if _, err := t.db.Exec("INSERT INTO edges (from_id, to_id, user_id, session_id, action, args, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		fromID, toID, t.userID, t.sessionID, action, string(argsJSON), now); err != nil {
-		log.Printf("topology: insert edge failed: %v", err)
+	// Cross-domain direct 'navigate' calls register the new domain as a fresh entry node,
+	// avoiding spurious edges between unrelated domains (e.g. Kaggle -> Baidu) when address bar is changed.
+	fromDomain := getDomain(fromURL)
+	toDomain := getDomain(toURL)
+	if action != "navigate" || fromDomain == toDomain || fromDomain == "" || toDomain == "" {
+		argsJSON, _ := json.Marshal(args)
+		if _, err := t.db.Exec("INSERT INTO edges (from_id, to_id, user_id, session_id, action, args, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			fromID, toID, t.userID, t.sessionID, action, string(argsJSON), now); err != nil {
+			log.Printf("topology: insert edge failed: %v", err)
+		}
 	}
 
 	// Debounced TTL prune: delete edges older than edgeTTL for this user.
