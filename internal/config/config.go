@@ -69,7 +69,7 @@ func LoadConfig() *Config {
 		NetworkIdleTimeout:    getEnvDuration("GHOST_NET_IDLE", 500*time.Millisecond),
 		DOMQuietTimeout:       getEnvDuration("GHOST_DOM_QUIET", 300*time.Millisecond),
 		VisualHashTimeout:     getEnvDuration("GHOST_VIS_HASH", 400*time.Millisecond),
-		StealthEnabled:        getEnvBool("GHOST_STEALTH", false),
+		StealthEnabled:        getEnvBool("GHOST_STEALTH", true),
 		CDPHostMap:            os.Getenv("GHOST_CDP_HOST_MAP"),
 		APIKey:                os.Getenv("GHOST_API_KEY"),
 		UserID:                os.Getenv("GHOST_USER_ID"),
