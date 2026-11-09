@@ -45,6 +45,7 @@ type Manager struct {
 	cfg      Config
 	mu       sync.RWMutex
 	cmd      *exec.Cmd
+	cmdDone  chan struct{}
 	browser  *Browser
 	registry *profile.Registry
 	cdpProxy interface{}
@@ -75,22 +76,38 @@ func (m *Manager) Start(ctx context.Context) (*Browser, error) {
 				fmt.Printf("[ghost-driver] "+f+"\n", a...)
 			},
 		})
+		if err := proxy.Start(); err != nil {
+			return nil, fmt.Errorf("CDP proxy listen: %w", err)
+		}
+		go proxy.Serve()
 		m.mu.Lock()
 		m.cdpProxy = proxy
 		m.mu.Unlock()
-		go func() {
-			if err := proxy.Start(); err != nil {
-				fmt.Printf("[ghost-driver] CDP proxy failed: %v\n", err)
-			}
-		}()
-		// Redirect devtools HTTP to proxy
 		m.cfg.DevToolsHTTP = fmt.Sprintf("http://127.0.0.1:%d", port)
 	}
 
+	var b *Browser
+	var err error
 	if m.cfg.Mode == ModeAttached {
-		return m.startAttached(ctx)
+		b, err = m.startAttached(ctx)
+	} else {
+		b, err = m.startManaged(ctx)
 	}
-	return m.startManaged(ctx)
+	if err != nil {
+		m.mu.RLock()
+		proxy := m.cdpProxy
+		m.mu.RUnlock()
+		if proxy != nil {
+			if p, ok := proxy.(*cdp.ReverseProxy); ok {
+				p.Stop()
+			}
+			m.mu.Lock()
+			m.cdpProxy = nil
+			m.mu.Unlock()
+		}
+		return nil, err
+	}
+	return b, nil
 }
 
 func (m *Manager) startAttached(ctx context.Context) (*Browser, error) {
@@ -173,8 +190,9 @@ func (m *Manager) startManaged(ctx context.Context) (*Browser, error) {
 	}
 	m.mu.Lock()
 	m.cmd = cmd
+	m.cmdDone = make(chan struct{})
 	m.mu.Unlock()
-	go func() { _ = cmd.Wait() }()
+	go func() { _ = cmd.Wait(); close(m.cmdDone) }()
 
 	// Wait for CDP port to be ready
 	var wsURL string
@@ -335,6 +353,7 @@ func (m *Manager) Stop() {
 	m.mu.RLock()
 	b := m.browser
 	cmd := m.cmd
+	cmdDone := m.cmdDone
 	proxy := m.cdpProxy
 	m.mu.RUnlock()
 	if b != nil {
@@ -342,6 +361,12 @@ func (m *Manager) Stop() {
 	}
 	if cmd != nil && cmd.Process != nil {
 		_ = cmd.Process.Kill()
+		if cmdDone != nil {
+			select {
+			case <-cmdDone:
+			case <-time.After(2 * time.Second):
+			}
+		}
 	}
 	if proxy != nil {
 		if p, ok := proxy.(*cdp.ReverseProxy); ok {

@@ -478,5 +478,7 @@ func (t *Topology) GetDomainMap(domain string) (map[string]any, error) {
 }
 
 func (t *Topology) Close() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.db.Close()
 }

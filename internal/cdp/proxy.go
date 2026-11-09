@@ -49,7 +49,8 @@ func NewProxy(cfg ProxyConfig) *ReverseProxy {
 	}
 }
 
-// Start begins listening and forwarding.
+// Start begins listening. It returns an error if the listen address is
+// unavailable. Call Serve afterwards to accept connections.
 func (p *ReverseProxy) Start() error {
 	ln, err := net.Listen("tcp", p.cfg.ListenAddr)
 	if err != nil {
@@ -59,15 +60,26 @@ func (p *ReverseProxy) Start() error {
 	p.ln = ln
 	p.lnMu.Unlock()
 	p.cfg.Logf("CDP proxy started: %s -> %s (rewrite Host: %s)", ln.Addr(), p.cfg.Upstream, p.cfg.RewriteHost)
+	return nil
+}
 
+// Serve accepts connections and forwards them. Blocks until Stop is called.
+func (p *ReverseProxy) Serve() {
+	p.lnMu.RLock()
+	ln := p.ln
+	p.lnMu.RUnlock()
+	if ln == nil {
+		return
+	}
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			select {
 			case <-p.quit:
-				return nil
+				return
 			default:
-				return err
+				p.cfg.Logf("proxy: accept error: %v", err)
+				return
 			}
 		}
 

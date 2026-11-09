@@ -82,7 +82,6 @@ func (ac *ActionCache) Get(url, intent string) (ActionCacheEntry, bool) {
 
 func (ac *ActionCache) Put(url, intent, selector, actionType string, fp profile.Fingerprint) {
 	ac.mu.Lock()
-	defer ac.mu.Unlock()
 	key := url + "\x00" + intent
 	now := time.Now().Unix()
 	e := ac.entries[key]
@@ -92,18 +91,30 @@ func (ac *ActionCache) Put(url, intent, selector, actionType string, fp profile.
 	e.SuccessCount++
 	e.LastUsedAt = now
 	ac.entries[key] = e
-	ac.persistLocked()
+	data := ac.marshalForPersistLocked()
+	ac.mu.Unlock()
+	if data != nil {
+		if err := os.WriteFile(ac.path, data, 0644); err != nil {
+			fmt.Printf("[ghost-driver] Warning: failed to persist action cache: %v\n", err)
+		}
+	}
 }
 
 func (ac *ActionCache) RecordSuccess(url, intent string) {
 	ac.mu.Lock()
-	defer ac.mu.Unlock()
 	key := url + "\x00" + intent
+	var data []byte
 	if e, ok := ac.entries[key]; ok {
 		e.SuccessCount++
 		e.LastUsedAt = time.Now().Unix()
 		ac.entries[key] = e
-		ac.persistLocked()
+		data = ac.marshalForPersistLocked()
+	}
+	ac.mu.Unlock()
+	if data != nil {
+		if err := os.WriteFile(ac.path, data, 0644); err != nil {
+			fmt.Printf("[ghost-driver] Warning: failed to persist action cache: %v\n", err)
+		}
 	}
 }
 
@@ -134,18 +145,16 @@ func (ac *ActionCache) evictLocked() {
 	}
 }
 
-func (ac *ActionCache) persistLocked() {
+func (ac *ActionCache) marshalForPersistLocked() []byte {
 	now := time.Now()
 	if now.Sub(ac.lastPersist) < 2*time.Second {
-		return
+		return nil
 	}
 	ac.lastPersist = now
 	ac.evictLocked()
 	data, err := json.MarshalIndent(ac.entries, "", "  ")
 	if err != nil {
-		return
+		return nil
 	}
-	if err := os.WriteFile(ac.path, data, 0644); err != nil {
-		fmt.Printf("[ghost-driver] Warning: failed to persist action cache: %v\n", err)
-	}
+	return data
 }

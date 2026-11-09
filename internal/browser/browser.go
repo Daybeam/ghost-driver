@@ -621,6 +621,9 @@ func (b *Browser) Close() {
 	if client != nil {
 		client.Close()
 	}
+	b.mu.Lock()
+	b.handlers = nil
+	b.mu.Unlock()
 }
 
 func (b *Browser) MarkDirty() {

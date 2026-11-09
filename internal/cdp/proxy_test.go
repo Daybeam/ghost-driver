@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestReverseProxy_Rewrites(t *testing.T) {
@@ -35,11 +34,12 @@ func TestReverseProxy_Rewrites(t *testing.T) {
 		ListenAddr: "127.0.0.1:0",
 		Upstream:   upstreamAddr,
 	})
-	go proxy.Start()
+	if err := proxy.Start(); err != nil {
+		t.Fatalf("proxy start: %v", err)
+	}
+	go proxy.Serve()
 	defer proxy.Stop()
 
-	// Wait for proxy to start
-	time.Sleep(100 * time.Millisecond)
 	proxyAddr := proxy.Addr()
 
 	// 3. Make request through proxy
