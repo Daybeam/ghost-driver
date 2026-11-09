@@ -175,26 +175,35 @@ Leverages existing session cookies/auth. Perfect for Rule 2 (API > Form filling)
 			}
 		}
 
+		var headersObj map[string]any
+		if err := json.Unmarshal([]byte(headersJSON), &headersObj); err != nil {
+			return mcpgo.NewToolResultError("invalid headers JSON: " + err.Error()), nil
+		}
+		safeHeaders, _ := json.Marshal(headersObj)
+		methodJS, _ := json.Marshal(method)
+		bodyJS, _ := json.Marshal(body)
+		urlJS, _ := json.Marshal(urlStr)
+
 		js := fmt.Sprintf(`
 (async () => {
 	const controller = new AbortController();
 	const timeoutId = setTimeout(() => controller.abort(), 15000);
 	const headers = %s;
 	const options = {
-		method: %q,
+		method: %s,
 		headers: headers,
 		credentials: 'include',
 		signal: controller.signal
 	};
-	if (%v && %q !== "") {
-		options.body = new URLSearchParams(%q).toString();
+	if (%v && %s !== "") {
+		options.body = new URLSearchParams(%s).toString();
 		options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-	} else if (%q !== "") {
-		options.body = %q;
+	} else if (%s !== "") {
+		options.body = %s;
 	}
 
 	try {
-		const resp = await fetch(%q, options);
+		const resp = await fetch(%s, options);
 		clearTimeout(timeoutId);
 		const text = await resp.text();
 		return JSON.stringify({
@@ -206,7 +215,7 @@ Leverages existing session cookies/auth. Perfect for Rule 2 (API > Form filling)
 		clearTimeout(timeoutId);
 		return JSON.stringify({error: e.toString()});
 	}
-})()`, headersJSON, method, isForm, body, body, body, body, urlStr)
+})()`, string(safeHeaders), string(methodJS), isForm, string(bodyJS), string(bodyJS), string(bodyJS), string(bodyJS), string(urlJS))
 
 		resRaw, err := b.EvalJS(ctx, js)
 		if err != nil {
