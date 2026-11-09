@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -146,6 +147,24 @@ func (s *State) InvokeCLI(ctx context.Context, action string, args map[string]an
 			return "", err
 		}
 		return text, nil
+	case "get_content":
+		format, _ := args["format"].(string)
+		if format == "" {
+			format = "markdown"
+		}
+		sel, _ := args["selector"].(string)
+		switch format {
+		case "text":
+			if sel != "" {
+				return b.InnerText(ctx, sel)
+			}
+			return b.GetAllText(ctx)
+		case "html":
+			return b.OuterHTML(ctx, sel)
+		default:
+			mode, _ := args["mode"].(string)
+			return b.HTMLToMarkdown(ctx, sel, mode)
+		}
 	case "list_tabs":
 		s.mu.RLock()
 		devHTTP := s.mgr.DevToolsHTTP()
@@ -251,6 +270,56 @@ func (s *State) InvokeCLI(ctx context.Context, action string, args map[string]an
 			return "", err
 		}
 		return fmt.Sprintf("Provided %d file(s) to the file chooser.", len(files)), nil
+	case "read_storage":
+		scope, _ := args["scope"].(string)
+		if scope == "" {
+			scope = "local"
+		}
+		var items map[string]string
+		var rErr error
+		if scope == "session" {
+			items, rErr = b.GetSessionStorage(ctx)
+		} else {
+			items, rErr = b.GetLocalStorage(ctx)
+		}
+		if rErr != nil {
+			return "", rErr
+		}
+		data, _ := json.Marshal(items)
+		return string(data), nil
+	case "write_storage":
+		scope, _ := args["scope"].(string)
+		if scope == "" {
+			scope = "local"
+		}
+		key, _ := args["key"].(string)
+		val, _ := args["value"].(string)
+		var wErr error
+		if scope == "session" {
+			wErr = b.SetSessionStorage(ctx, key, val)
+		} else {
+			wErr = b.SetLocalStorage(ctx, key, val)
+		}
+		if wErr != nil {
+			return "", wErr
+		}
+		return fmt.Sprintf("set %sStorage[%s]=%s", scope, key, val), nil
+	case "remove_storage":
+		scope, _ := args["scope"].(string)
+		if scope == "" {
+			scope = "local"
+		}
+		key, _ := args["key"].(string)
+		var dErr error
+		if scope == "session" {
+			dErr = b.RemoveSessionStorage(ctx, key)
+		} else {
+			dErr = b.RemoveLocalStorage(ctx, key)
+		}
+		if dErr != nil {
+			return "", dErr
+		}
+		return fmt.Sprintf("removed %sStorage[%s]", scope, key), nil
 	default:
 		return "", fmt.Errorf("unknown action: %s", action)
 	}
