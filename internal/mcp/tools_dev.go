@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -136,9 +138,11 @@ func (s *State) registerDevTools(srv *server.MCPServer) {
 
 	// ── compare_visual_state ──────────────────────────────────────────────────
 	srv.AddTool(mcpgo.NewTool("compare_visual_state",
-		mcpgo.WithDescription(`Return the visual hash (SHA-256) of the current viewport.
-If a reference_hash is provided, it also returns if they match.`),
+		mcpgo.WithDescription(`Return the visual hash (SHA-256) of the current viewport or a specific element.
+If a reference_hash is provided, it also returns if they match.
+If a selector is provided, only the element region is hashed (enables region-specific visual regression).`),
 		mcpgo.WithString("reference_hash"),
+		mcpgo.WithString("selector"),
 	), s.auditWrapper("compare_visual_state", func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 		b, _, err := s.ensureConnected(ctx)
 		if err != nil {
@@ -148,9 +152,22 @@ If a reference_hash is provided, it also returns if they match.`),
 			return mcpgo.NewToolResultError("no browser connected"), nil
 		}
 		ref := req.GetString("reference_hash", "")
-		hash, match, err := b.CompareVisualState(ctx, ref)
-		if err != nil {
-			return mcpgo.NewToolResultError(err.Error()), nil
+		sel := req.GetString("selector", "")
+
+		var hash string
+		var match bool
+		if sel != "" {
+			png, err := b.CaptureElement(ctx, sel)
+			if err != nil {
+				return mcpgo.NewToolResultError(err.Error()), nil
+			}
+			hash = fmt.Sprintf("%x", sha256.Sum256(png))
+			match = ref != "" && hash == ref
+		} else {
+			hash, match, err = b.CompareVisualState(ctx, ref)
+			if err != nil {
+				return mcpgo.NewToolResultError(err.Error()), nil
+			}
 		}
 
 		res := struct {
@@ -158,6 +175,89 @@ If a reference_hash is provided, it also returns if they match.`),
 			Match bool   `json:"match"`
 		}{Hash: hash, Match: match}
 		data, _ := json.Marshal(res)
+		return mcpgo.NewToolResultText(string(data)), nil
+	}))
+
+	// ── pixel_diff ────────────────────────────────────────────────────────────
+	srv.AddTool(mcpgo.NewTool("pixel_diff",
+		mcpgo.WithDescription(`Compare current screenshot against a reference image pixel-by-pixel.
+Returns diff bounding box (where), diff percentage, max color distance, and current hash.
+If reference_image (base64 PNG) is not provided, just returns the current screenshot hash.
+Use selector to limit capture to a specific element region.
+threshold (0.0-1.0) sets the diff percentage above which match=false (default 0.01 = 1%).`),
+		mcpgo.WithString("reference_image"),
+		mcpgo.WithString("selector"),
+		mcpgo.WithNumber("threshold"),
+	), s.auditWrapper("pixel_diff", func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		b, _, err := s.ensureConnected(ctx)
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		if b == nil {
+			return mcpgo.NewToolResultError("no browser connected"), nil
+		}
+		refImg := req.GetString("reference_image", "")
+		sel := req.GetString("selector", "")
+		threshold := req.GetFloat("threshold", 0.01)
+
+		result, err := b.PixelDiff(ctx, refImg, sel, threshold)
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		data, _ := json.MarshalIndent(result, "", "  ")
+		return mcpgo.NewToolResultText(string(data)), nil
+	}))
+
+	// ── diff_dom_tree ─────────────────────────────────────────────────────────
+	srv.AddTool(mcpgo.NewTool("diff_dom_tree",
+		mcpgo.WithDescription(`Compare current accessibility tree against a reference tree (JSON from get_accessibility_tree).
+Returns node-level differences: added nodes, removed nodes, and changed properties (role, name, focusable, etc.).
+If reference_tree is not provided, returns the current AX tree with no diffs.`),
+		mcpgo.WithString("reference_tree"),
+	), s.auditWrapper("diff_dom_tree", func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		b, _, err := s.ensureConnected(ctx)
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		if b == nil {
+			return mcpgo.NewToolResultError("no browser connected"), nil
+		}
+		refTree := req.GetString("reference_tree", "")
+
+		result, err := b.DiffDOMTree(ctx, json.RawMessage(refTree))
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		data, _ := json.MarshalIndent(result, "", "  ")
+		return mcpgo.NewToolResultText(string(data)), nil
+	}))
+
+	// ── sample_pixels ─────────────────────────────────────────────────────────
+	srv.AddTool(mcpgo.NewTool("sample_pixels",
+		mcpgo.WithDescription(`Sample pixels at grid intervals within a region and compute color distance from a reference color.
+Returns RGB values and color distance for each sample point.
+selector limits sampling to an element region. grid sets samples per axis (default 10 = 100 samples).
+reference_color is a hex string like "#FF0000".`),
+		mcpgo.WithString("selector"),
+		mcpgo.WithNumber("grid"),
+		mcpgo.WithString("reference_color"),
+	), s.auditWrapper("sample_pixels", func(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+		b, _, err := s.ensureConnected(ctx)
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		if b == nil {
+			return mcpgo.NewToolResultError("no browser connected"), nil
+		}
+		sel := req.GetString("selector", "")
+		grid := int(req.GetFloat("grid", 10))
+		refColor := req.GetString("reference_color", "#FFFFFF")
+
+		samples, err := b.SamplePixels(ctx, sel, nil, grid, refColor)
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		data, _ := json.MarshalIndent(samples, "", "  ")
 		return mcpgo.NewToolResultText(string(data)), nil
 	}))
 
