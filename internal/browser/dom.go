@@ -51,14 +51,38 @@ func (b *Browser) HTMLToMarkdown(ctx context.Context, selector string, mode stri
 	const controlsTemplate = `
 (function extractControls(rootEl) {
   if (!rootEl) return "";
-  var out = [];
   var sel = 'input, textarea, select, button, a, [role="button"], [role="link"], summary';
   var els = Array.from(rootEl.querySelectorAll(sel));
-  els.forEach(function(el) {
-    if (el.offsetParent === null && el.tagName !== 'HTML' && el.tagName !== 'BODY') {
-      var style = window.getComputedStyle(el);
-      if (style.display === 'none' || style.visibility === 'hidden') return;
+
+  var landmarkTags = ['main','nav','aside','header','footer','form','section'];
+  var landmarkRoles = ['region','navigation','main','banner','contentinfo','form','search','toolbar','dialog','menu','menubar','tablist','tabpanel','complementary'];
+
+  function findContainer(el) {
+    var node = el.parentElement;
+    while (node && node !== rootEl) {
+      var tag = node.tagName.toLowerCase();
+      var role = node.getAttribute('role') || '';
+      var ariaLabel = node.getAttribute('aria-label') || '';
+      if (landmarkTags.indexOf(tag) >= 0 || landmarkRoles.indexOf(role) >= 0 || ariaLabel) {
+        return node;
+      }
+      node = node.parentElement;
     }
+    return rootEl;
+  }
+
+  function containerLabel(el) {
+    if (el === rootEl) return 'page';
+    var tag = el.tagName.toLowerCase();
+    var role = el.getAttribute('role') || '';
+    var ariaLabel = el.getAttribute('aria-label') || '';
+    var id = el.id ? '#' + el.id : '';
+    if (ariaLabel) return tag + id + ' "' + ariaLabel + '"';
+    if (role) return tag + id + ' role=' + role;
+    return tag + id;
+  }
+
+  function formatEl(el) {
     var tag = el.tagName.toLowerCase();
     var role = el.getAttribute('role') || '';
     var text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ');
@@ -77,21 +101,49 @@ func (b *Browser) HTMLToMarkdown(ctx context.Context, selector string, mode stri
         var l = document.querySelector('label[for="' + el.id + '"]');
         if (l) label = ' label="' + l.innerText.trim() + '"';
       }
-      out.push('[INPUT] type="' + type + '"' + id + name + ph + label + val + status);
+      return '[INPUT] type="' + type + '"' + id + name + ph + label + val + status;
     } else if (tag === 'select') {
       var id = el.id ? ' id="' + el.id + '"' : '';
       var opts = Array.from(el.options).slice(0, 5).map(function(o){ return o.value || o.text.trim(); }).join('/');
-      out.push('[SELECT]' + id + ' options: ' + opts + status);
+      return '[SELECT]' + id + ' options: ' + opts + status;
     } else if (tag === 'button' || role === 'button') {
       var id = el.id ? ' id="' + el.id + '"' : '';
-      out.push('[BUTTON] "' + text + '"' + id + status);
+      return '[BUTTON] "' + text + '"' + id + status;
     } else if (tag === 'a' || role === 'link') {
       var href = el.getAttribute('href') || '';
       var id = el.id ? ' id="' + el.id + '"' : '';
-      out.push('[A] "' + text + '" href="' + href + '"' + id + status);
+      return '[A] "' + text + '" href="' + href + '"' + id + status;
     }
+    return '';
+  }
+
+  var groups = new Map();
+  var visibleEls = [];
+  els.forEach(function(el) {
+    if (el.offsetParent === null && el.tagName !== 'HTML' && el.tagName !== 'BODY') {
+      var style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden') return;
+    }
+    visibleEls.push(el);
+    var container = findContainer(el);
+    var label = containerLabel(container);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(el);
   });
-  return out.join('\n');
+
+  var out = [];
+  out.push('Total: ' + visibleEls.length + ' controls in ' + groups.size + ' sections');
+  out.push('');
+  groups.forEach(function(groupEls, label) {
+    out.push('[SECTION: ' + label + '] (' + groupEls.length + ' controls)');
+    groupEls.forEach(function(el) {
+      var line = formatEl(el);
+      if (line) out.push('  ' + line);
+    });
+    out.push('');
+  });
+
+  return out.join('\n').trim();
 })(%s)`
 
 	const walkerTemplate = `
